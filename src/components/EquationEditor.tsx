@@ -1,22 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
 import { MathfieldElement } from 'mathlive'
-import { ChevronDown, Eraser, Keyboard, X } from 'lucide-react'
+import { ChevronDown, Delete, Eraser, Keyboard } from 'lucide-react'
 
 MathfieldElement.fontsDirectory = import.meta.env.BASE_URL + 'fonts'
 MathfieldElement.soundsDirectory = null
 
-const KEY_GROUPS: { label: string; keys: [string, string][] }[] = [
+const KEY_SECTIONS: { label: string; keys: [string, string][]; className?: string }[] = [
+  { label: 'الأرقام', className: 'symbol-numbers', keys: [
+    ['0', '0'], ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'],
+    ['5', '5'], ['6', '6'], ['7', '7'], ['8', '8'], ['9', '9'],
+  ] },
   { label: 'الأساسيات', keys: [
-    ['س', 'س'], ['ص', 'ص'], ['x²', '#@^{2}'], ['xⁿ', '#@^{#?}'], ['كسر', '\\frac{#@}{#?}'], ['√', '\\sqrt{#?}'],
-    ['( )', '\\left(#@\\right)'], ['+', '+'], ['−', '-'], ['×', '\\cdot '], ['=', '='],
+    ['س', 'س'], ['ص', 'ص'], ['x²', '#@^{2}'], ['xⁿ', '#@^{#?}'],
+    ['(', '('], [')', ')'], ['كسر', '\\frac{#@}{#?}'], ['√', '\\sqrt{#?}'],
+    ['+', '+'], ['−', '-'], ['×', '\\cdot '], ['÷', '\\div '], ['=', '='],
   ] },
-  { label: 'الدوال المثلثية', keys: [
-  ['جا', '\\sin\\left(#?\\right)'], ['جتا', '\\cos\\left(#?\\right)'], ['ظا', '\\tan\\left(#?\\right)'],
-  ['ظتا', '\\cot\\left(#?\\right)'], ['قا', '\\sec\\left(#?\\right)'], ['قتا', '\\csc\\left(#?\\right)'],
-  ] },
-  { label: 'دوال إضافية', keys: [
-  ['asin', '\\arcsin\\left(#?\\right)'], ['acos', '\\arccos\\left(#?\\right)'], ['atan', '\\arctan\\left(#?\\right)'],
-  ['هـˣ', '\\exp\\left(#?\\right)'], ['ln', '\\ln\\left(#?\\right)'],
+  { label: 'الدوال', keys: [
+    ['جا', '\\sin\\left(#?\\right)'], ['جتا', '\\cos\\left(#?\\right)'], ['ظا', '\\tan\\left(#?\\right)'],
+    ['ظتا', '\\cot\\left(#?\\right)'], ['قا', '\\sec\\left(#?\\right)'], ['قتا', '\\csc\\left(#?\\right)'],
+    ['asin', '\\arcsin\\left(#?\\right)'], ['acos', '\\arccos\\left(#?\\right)'], ['atan', '\\arctan\\left(#?\\right)'],
+    ['هـˣ', '\\exp\\left(#?\\right)'], ['ln', '\\ln\\left(#?\\right)'], ['log', '\\log\\left(#?\\right)'],
   ] },
 ]
 
@@ -26,7 +29,6 @@ export function EquationEditor({ label, value, onChange, onEnter }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const mf = useRef<MathfieldElement | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(true)
-  const [activeGroup, setActiveGroup] = useState(0)
   const cb = useRef({ onChange, onEnter })
   cb.current = { onChange, onEnter }
 
@@ -48,6 +50,10 @@ export function EquationEditor({ label, value, onChange, onEnter }: Props) {
   useEffect(() => { if (mf.current && mf.current.value !== value) mf.current.value = value }, [value])
 
   const insert = (l: string) => { mf.current?.insert(l, { focus: true, format: 'latex' }); onChange(mf.current?.value ?? '') }
+  const deleteBackward = () => {
+    mf.current?.executeCommand('deleteBackward')
+    onChange(mf.current?.value ?? '')
+  }
 
   return (
     <div>
@@ -55,26 +61,36 @@ export function EquationEditor({ label, value, onChange, onEnter }: Props) {
         <span>{label}</span>
         <div className="flex items-center gap-1">
         <button type="button" onClick={() => { mf.current?.focus(); setPaletteOpen((open) => !open) }} className="editor-tool">
-          <Keyboard size={16} /> {paletteOpen ? 'إخفاء الرموز' : 'لوحة الرموز'}
+          <Keyboard size={16} /> {paletteOpen ? 'إخفاء اللوحة' : 'لوحة الرموز'}
         </button>
-        <button type="button" onClick={() => { onChange(''); mf.current?.focus() }} className="editor-tool">
-          <Eraser size={15} /> مسح
+        <button type="button" onClick={deleteBackward} className="editor-tool editor-tool-danger">
+          <Delete size={15} /> حذف
+        </button>
+        <button type="button" onClick={() => { onChange(''); mf.current?.focus() }} className="editor-tool editor-tool-danger">
+          <Eraser size={15} /> مسح الكل
         </button>
         </div>
       </div>
       <div ref={host} dir="ltr" className="math-editor" />
-      {paletteOpen && <div className="symbol-panel" aria-label="لوحة الرموز الرياضية">
-        <div className="symbol-tabs" role="tablist">
-          {KEY_GROUPS.map((group, index) => <button key={group.label} role="tab" aria-selected={activeGroup === index}
-            className={activeGroup === index ? 'active' : ''} onClick={() => setActiveGroup(index)}>{group.label}</button>)}
-          <button className="symbol-close" aria-label="إغلاق لوحة الرموز" onClick={() => setPaletteOpen(false)}><X size={16} /></button>
+      {paletteOpen && <div className="symbol-panel" aria-label="لوحة الإدخال الرياضية">
+        <div className="symbol-panel-heading">
+          <div>
+            <strong>لوحة الإدخال</strong>
+            <span>اختار رمزًا لإضافته عند المؤشر</span>
+          </div>
+          <span className="symbol-panel-status">جاهزة</span>
         </div>
-        <div className="symbol-grid">
-          {KEY_GROUPS[activeGroup].keys.map(([t, l]) => (
-            <button key={t} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insert(l)}>{t}</button>
-          ))}
+        <div className="symbol-sections">
+          {KEY_SECTIONS.map((section) => <section key={section.label} className={`symbol-section ${section.className ?? ''}`}>
+            <h4>{section.label}</h4>
+            <div className="symbol-grid">
+              {section.keys.map(([t, l]) => (
+                <button key={t} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insert(l)}>{t}</button>
+              ))}
+            </div>
+          </section>)}
         </div>
-        <p className="symbol-tip"><ChevronDown size={14} /> اضغط داخل المعادلة أولًا للحفاظ على موضع المؤشر</p>
+        <p className="symbol-tip"><ChevronDown size={14} /> دوس جوه المعادلة الأول عشان الرمز يتحط مكان المؤشر</p>
       </div>}
     </div>
   )

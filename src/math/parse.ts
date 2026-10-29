@@ -56,6 +56,7 @@ function lex(src: string): string[] {
       const value = word[0]
       if (value === 'س' || value.toLowerCase() === 'x') out.push('x')
       else if (value === 'ص' || value.toLowerCase() === 'y') out.push('y')
+      else if (value === 'ل' || value.toLowerCase() === 't') out.push('x')
       else if (names[value]) out.push(value)
       else out.push(value)
       i += value.length; continue
@@ -67,13 +68,13 @@ function lex(src: string): string[] {
 
 export function parse(src: string): N {
   const T = lex(src)
-  if (!T.length) throw new UserError('اكتب التعبير أولًا.')
+  if (!T.length) throw new UserError('اكتب الدالة الأول.')
   let i = 0
   const peek = () => T[i]
   const eat = (want?: string) => {
     const t = T[i++]
-    if (t === undefined) throw new UserError('التعبير غير مكتمل. تأكد من إغلاق الأقواس واستكمال الكسر أو الأس.')
-    if (want && t !== want) throw new UserError(`توقعت «${want}» لكن وجدت «${t}». راجع الأقواس.`)
+    if (t === undefined) throw new UserError('الدالة ناقصة. اقفل الأقواس وكمل الكسر أو الأس.')
+    if (want && t !== want) throw new UserError(`كنت مستني «${want}» ولقيت «${t}». راجع الأقواس.`)
     return t
   }
   const starts = (t?: string) => !!t && (/^\d/.test(t) || t === '.' || /^[xy]$/.test(t) || t === '(' || t === '{' || t === '\\frac' || t === '\\sqrt' || !!names[t])
@@ -81,7 +82,7 @@ export function parse(src: string): N {
   let exprInLast: N = { t: 'n', v: 0 }
   function exprIn(close: string): N {
     const result = expr()
-    if (peek() !== close) throw new UserError('توقّف التعبير قبل إغلاق القوس.')
+    if (peek() !== close) throw new UserError('الدالة وقفت قبل ما القوس يتقفل.')
     exprInLast = result
     return result
   }
@@ -110,7 +111,7 @@ export function parse(src: string): N {
       eat('^')
       const exponent = peek() === '{' ? group() : unary()
       if ((exponent.t === 'n' && exponent.v === -1) || (exponent.t === 'neg' && exponent.a.t === 'n' && exponent.a.v === 1)) {
-        throw new UserError('الصيغة جا⁻¹(س) ملتبسة: قد تعني مقلوب جا أو الدالة العكسية. استخدم 1/جا(س) للمقلوب، أو asin(س) للدالة العكسية.')
+        throw new UserError('جا⁻¹(س) ممكن تتفهم بطريقتين. اكتب 1/جا(س) للمقلوب، أو asin(س) للدالة العكسية.')
       }
       const arg = peek() === '(' ? (eat('('), exprIn(')'), eat(')'), exprInLast) : atom()
       return { t: '^', a: { t: 'fn', f, a: arg }, b: exponent }
@@ -131,18 +132,18 @@ export function parse(src: string): N {
       const a = peek() === '(' ? (eat('('), exprIn(')'), eat(')'), exprInLast) : atom()
       return { t: 'fn', f: names[t], a }
     }
-    if (/^[A-Za-z\u0600-\u06ff]+$/.test(t)) throw new UserError(`المتغير «${t}» غير مدعوم. استخدم س أو ص أو x أو y.`)
-    throw new UserError(`الرمز «${t}» غير مدعوم. استخدم + − × ÷ والأسس والجذور والدوال المعروفة.`)
+    if (/^[A-Za-z\u0600-\u06ff]+$/.test(t)) throw new UserError(`المتغير «${t}» مش مدعوم. استخدم س أو ص أو x أو y.`)
+    throw new UserError(`الرمز «${t}» مش مدعوم. استخدم + − × ÷ والأسس والجذور والدوال المعروفة.`)
   }
   const result = expr()
-  if (i < T.length) throw new UserError(`تعذّر فهم الجزء «${T.slice(i).join(' ')}». إذا أردت مربع الدالة استخدم جا²(س)، وللدالة العكسية استخدم asin(س) أو acos(س) أو atan(س).`)
+  if (i < T.length) throw new UserError(`مش فاهم الجزء «${T.slice(i).join(' ')}». لو عايز مربع الدالة اكتب جا²(س)، وللدالة العكسية استخدم asin(س) أو acos(س) أو atan(س).`)
   return result
 }
 
 export function parseRelation(src: string): { left: N; right: N } {
   const normalized = normalize(src)
   const at = normalized.indexOf('=')
-  if (at < 0) throw new UserError('للاشتقاق الضمني اكتب معادلة تحتوي على علامة = مثل: ص² + س² = 1.')
+  if (at < 0) throw new UserError('للاشتقاق الضمني اكتب معادلة فيها =، زي: ص² + س² = 1.')
   const left = parse(normalized.slice(0, at))
   const right = parse(normalized.slice(at + 1))
   return { left, right }

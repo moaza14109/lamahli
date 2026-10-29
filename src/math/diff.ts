@@ -176,10 +176,76 @@ function d(e: N, variable = 'x'): N {
 }
 export const derive = (e: N, variable = 'x') => simp(d(e, variable))
 export function deriveN(e: N, order: number, variable = 'x'): N {
-  if (!Number.isInteger(order) || order < 1 || order > 5) throw new UserError('رتبة الاشتقاق يجب أن تكون عددًا صحيحًا من 1 إلى 5.')
+  if (!Number.isInteger(order) || order < 1 || order > 5) throw new UserError('رتبة الاشتقاق لازم تكون عدد صحيح من 1 لـ 5.')
   let result = e
   for (let i = 0; i < order; i++) result = derive(result, variable)
   return result
+}
+
+export interface HigherSolution {
+  f: N
+  derivatives: N[]
+  order: number
+  note?: string
+}
+
+export function solveHigher(f: N, order: number, variable = 'x'): HigherSolution {
+  if (!Number.isInteger(order) || order < 1 || order > 5) throw new UserError('رتبة الاشتقاق لازم تكون عدد صحيح من 1 لـ 5.')
+  if (!hasX(f, variable)) throw new UserError(`مش لاقي المتغير ${variable === 'y' ? 'ص / y' : 'س / x'} في الدالة.`)
+  const derivatives: N[] = []
+  let current = f
+  for (let i = 0; i < order; i++) {
+    const next = derive(current, variable)
+    if (!verify(current, next) && hasOtherVariable(current, variable)) {
+      throw new UserError('مش قادر أتأكد من إحدى المشتقات العليا بثقة، فمش هعرض نتيجة غير مؤكدة.')
+    }
+    current = next
+    derivatives.push(current)
+  }
+  return { f, derivatives, order }
+}
+
+export interface ParametricSolution {
+  x: N
+  y: N
+  dx: N
+  dy: N
+  first: N
+  second?: N
+}
+
+export function solveParametric(x: N, y: N, includeSecond: boolean): ParametricSolution {
+  const dx = derive(x)
+  const dy = derive(y)
+  if (!verify(x, dx) || !verify(y, dy)) throw new UserError('مش قادر أتأكد من الاشتقاق البارامتري بثقة، فراجع الصيغتين وجرّب تاني.')
+  if (same(dx, num(0))) throw new UserError('مشتقة س بالنسبة للمتغير الوسيط طلعت صفر، فالمشتقة البارامترية مش معرّفة بالقسمة دي.')
+  const first = simp({ t: '/', a: dy, b: dx })
+  const second = includeSecond ? simp({ t: '/', a: derive(first), b: dx }) : undefined
+  return { x, y, dx, dy, first, second }
+}
+
+export interface PointSolution {
+  f: N
+  x: number
+  y: number
+  slope: number
+  equation: N
+  vertical?: boolean
+  normal?: N
+}
+
+export function solvePointApplication(f: N, x: number, kind: 'tangent' | 'normal'): PointSolution {
+  if (!Number.isFinite(x)) throw new UserError('اكتب قيمة س صحيحة.')
+  const y = ev(f, x)
+  const slope = ev(derive(f), x)
+  if (!Number.isFinite(y) || !Number.isFinite(slope)) throw new UserError('الدالة أو مشتقتها مش معرّفة عند قيمة س دي.')
+  if (kind === 'normal' && Math.abs(slope) < 1e-12) {
+    return { f, x, y, slope, equation: { t: 'n', v: x }, vertical: true }
+  }
+  if (kind === 'tangent' && Math.abs(slope) > 1e12) throw new UserError('المماس رأسي عند النقطة دي، فمش بيتكتب كـ ص بدلالة س.')
+  const m = kind === 'normal' ? -1 / slope : slope
+  const equation: N = { t: '+', a: { t: '*', a: { t: 'n', v: m }, b: { t: '-', a: { t: 'v', name: 'x' }, b: { t: 'n', v: x } } }, b: { t: 'n', v: y } }
+  return { f, x, y, slope, equation: simp(equation) }
 }
 
 /* ---------- التحقق العددي ---------- */
@@ -215,36 +281,36 @@ function hasOtherVariable(e: N, variable: string): boolean {
 
 /* ---------- خطوات الحل ---------- */
 export interface Step { title: string; why: string; tex: string }
-export interface Solution { f: N; rule: string; steps: Step[]; result: N; hints: string[]; note?: string }
+export interface Solution { f: N; variable: string; rule: string; steps: Step[]; result: N; hints: string[]; note?: string }
 
-const D = (e: N, variable = 'x') => `\\frac{d}{d${variable === 'y' ? '\\text{ص}' : '\\text{س}'}}\\left[${tex(e)}\\right]`
+const D = (e: N, variable = 'x') => `\\frac{\\text{د}}{\\text{د ${variable === 'y' ? 'ص' : 'س'}}}\\left[${tex(e)}\\right]`
 const leaf = (c: N) => c.t === 'v' || !hasX(c)
 const Dk = (c: N, variable = 'x') => (leaf(c) ? tex(derive(c, variable)) : D(c, variable))
 
 function rule(e: N, variable = 'x'): { name: string; why: string; form: string; kids: N[] } {
   switch (e.t) {
-    case 'neg': return { name: 'إشارة السالب', why: 'إشارة السالب تبقى كما هي ونشتق ما بعدها.', form: `-${Dk(e.a, variable)}`, kids: [e.a] }
+    case 'neg': return { name: 'إشارة السالب', why: 'السالب بيفضل زي ما هو، ونشتق اللي بعده.', form: `-${Dk(e.a, variable)}`, kids: [e.a] }
     case '+': case '-': return {
-      name: 'قاعدة الجمع والطرح', why: 'مشتقة المجموع أو الفرق هي مجموع أو فرق المشتقات، فنشتق كل حد على حدة.',
+      name: 'قاعدة الجمع والطرح', why: 'مشتقة المجموع أو الفرق هي مجموع أو فرق المشتقات، فبنشتق كل حد لوحده.',
       form: `${Dk(e.a, variable)} ${e.t} ${Dk(e.b, variable)}`, kids: [e.a, e.b] }
     case '*':
-      if (!hasX(e.a, variable)) return { name: 'ثابت × دالة', why: 'الثابت الذي يضرب دالة يبقى كما هو، ونشتق الدالة فقط.', form: `${wrap(e.a, 2)} \\cdot ${Dk(e.b, variable)}`, kids: [e.b] }
-      if (!hasX(e.b, variable)) return { name: 'ثابت × دالة', why: 'الثابت الذي يضرب دالة يبقى كما هو، ونشتق الدالة فقط.', form: `${Dk(e.a, variable)} \\cdot ${wrap(e.b, 2)}`, kids: [e.a] }
-      return { name: 'قاعدة الضرب', why: 'مشتقة حاصل الضرب = مشتقة الأولى × الثانية + الأولى × مشتقة الثانية.',
+      if (!hasX(e.a, variable)) return { name: 'ثابت × دالة', why: 'الثابت اللي بيضرب دالة بيفضل زي ما هو، وبنشتق الدالة بس.', form: `${wrap(e.a, 2)} \\cdot ${Dk(e.b, variable)}`, kids: [e.b] }
+      if (!hasX(e.b, variable)) return { name: 'ثابت × دالة', why: 'الثابت اللي بيضرب دالة بيفضل زي ما هو، وبنشتق الدالة بس.', form: `${Dk(e.a, variable)} \\cdot ${wrap(e.b, 2)}`, kids: [e.a] }
+      return { name: 'قاعدة الضرب', why: 'مشتقة الضرب = مشتقة الأولى × التانية + الأولى × مشتقة التانية.',
         form: `${Dk(e.a, variable)} \\cdot ${wrap(e.b, 2)} + ${wrap(e.a, 2)} \\cdot ${Dk(e.b, variable)}`, kids: [e.a, e.b] }
     case '/':
-      if (!hasX(e.b, variable)) return { name: 'القسمة على ثابت', why: 'نشتق البسط ثم نقسم على الثابت نفسه.', form: `\\frac{${Dk(e.a, variable)}}{${tex(e.b)}}`, kids: [e.a] }
-      return { name: 'قاعدة القسمة', why: 'مشتقة الكسر = (مشتقة البسط × المقام − البسط × مشتقة المقام) ÷ مربع المقام.',
+      if (!hasX(e.b, variable)) return { name: 'القسمة على ثابت', why: 'بنشتق البسط وبنقسم على نفس الثابت.', form: `\\frac{${Dk(e.a, variable)}}{${tex(e.b)}}`, kids: [e.a] }
+      return { name: 'قاعدة القسمة', why: 'مشتقة الكسر = (مشتقة البسط × المقام − البسط × مشتقة المقام) على مربع المقام.',
         form: `\\frac{${Dk(e.a, variable)} \\cdot ${wrap(e.b, 2)} - ${wrap(e.a, 2)} \\cdot ${Dk(e.b, variable)}}{\\left(${tex(e.b)}\\right)^{2}}`, kids: [e.a, e.b] }
     case '^': {
       const n1 = tex(simp(sub(e.b, num(1))))
       if (e.a.t === 'v') return { name: 'قاعدة القوة', why: 'ننزل الأس ليصبح معاملًا، ثم ننقص الأس بمقدار ١.', form: `${wrap(e.b, 5)} \\, ${tex(e.a)}^{${n1}}`, kids: [] }
-      return { name: 'قاعدة السلسلة', why: 'الدالة الخارجية قوة لشيء بين قوسين: نشتق القوة كما هي، ثم نضرب في مشتقة ما بداخل القوسين.',
+      return { name: 'قاعدة السلسلة', why: 'دي قوة لحاجة جواها دالة: بنشتق القوة وبنضرب في مشتقة اللي جوه.',
         form: `${wrap(e.b, 5)} \\left(${tex(e.a)}\\right)^{${n1}} \\cdot ${Dk(e.a, variable)}`, kids: [e.a] }
     }
     case 'fn': {
       const names: Record<string, string> = { sin: 'جا', cos: 'جتا', tan: 'ظا', cot: 'ظتا', sec: 'قا', csc: 'قتا', asin: 'arcsin', acos: 'arccos', atan: 'arctan', exp: 'الدالة الأسية', ln: 'اللوغاريتم الطبيعي', log: 'اللوغاريتم العشري' }
-      return { name: `قاعدة مشتقة ${names[e.f]}`, why: `نشتق الدالة الخارجية ثم نضرب في مشتقة ما بداخلها (قاعدة السلسلة).`, form: `${tex({ t: 'fn', f: e.f, a: e.a })}' \\cdot ${Dk(e.a, variable)}`, kids: [e.a] }
+      return { name: `قاعدة مشتقة ${names[e.f]}`, why: `بنشتق الدالة الخارجية وبنضرب في مشتقة اللي جواها (قاعدة السلسلة).`, form: `${tex({ t: 'fn', f: e.f, a: e.a })}' \\cdot ${Dk(e.a, variable)}`, kids: [e.a] }
     }
     default: return { name: 'الثابت أو المتغير', why: '', form: '', kids: [] }
   }
@@ -261,52 +327,58 @@ function walk(e: N, out: Step[], top: boolean, variable = 'x') {
 function hasDomainIssue(e: N): boolean {
   if (e.t === 'n' || e.t === 'v') return false
   if (e.t === 'neg') return hasDomainIssue(e.a)
-  if (e.t === 'fn') return hasDomainIssue(e.a)
+  if (e.t === 'fn') return ['ln', 'log', 'asin', 'acos'].includes(e.f) || hasDomainIssue(e.a)
   if (e.t === '/' && hasX(e.b)) return true
   if (e.t === '^' && !(Number.isInteger((e.b as { v?: number }).v ?? 0.5) && (e.b as { v?: number }).v! >= 0)) return true
   return hasDomainIssue(e.a) || hasDomainIssue(e.b)
 }
 
 export function solve(f: N, variable = 'x'): Solution {
-  if (!hasX(f, variable)) throw new UserError(`لم أجد المتغير ${variable === 'y' ? 'ص / y' : 'س / x'} في الدالة.`)
+  if (!hasX(f, variable)) throw new UserError(`مش لاقي المتغير ${variable === 'y' ? 'ص / y' : 'س / x'} في الدالة.`)
   const result = derive(f, variable)
-  if (!verify(f, result) && !hasOtherVariable(f, variable)) throw new UserError('لا أستطيع التأكد من صحة مشتقة هذه الدالة بثقة، لذلك لن أعرض حلًا. جرّب دالة أبسط أو راجع كتابتها.')
+  if (!verify(f, result) && !hasOtherVariable(f, variable)) throw new UserError('مش قادر أتأكد من مشتقة الدالة دي بثقة، فمش هعرض نتيجة غلط. بسّطها أو راجع كتابتها وجرّب تاني.')
   const top = rule(f, variable)
   const steps: Step[] = []
   walk(f, steps, true, variable)
   steps.push({ title: 'التجميع والتبسيط', why: 'نعوّض بمشتقات الأجزاء ونبسّط الناتج.', tex: `${Y}' = ${tex(result)}` })
   return {
-    f, result, steps, rule: top.name,
+    f, variable, result, steps, rule: top.name,
     hints: [
-      'انظر إلى الدالة كاملةً: ما آخر عملية تربط أجزاءها؟ جمع أو طرح، ضرب، قسمة، أم قوة لشيء بين قوسين؟',
-      `القاعدة التي تبدأ بها هنا: ${top.name}.`,
+      'بص على آخر عملية في الدالة: جمع وطرح، ضرب، قسمة، ولا قوة لحاجة جوا قوسين؟',
+      `القاعدة اللي هنبدأ بيها: ${top.name}.`,
       top.why,
     ],
-    note: hasDomainIssue(f) ? 'تنبيه: الدالة ومشتقتها غير معرّفتين عند القيم التي تجعل المقام صفرًا أو ما تحت الجذر سالبًا.' : undefined,
+    note: hasDomainIssue(f) ? 'خلي بالك: الدالة ومشتقتها مش بيكونوا معرّفين في كل القيم؛ زي لما المقام يبقى صفر أو اللي تحت الجذر يبقى سالب.' : undefined,
   }
 }
 
 export function solveImplicit(src: string): Solution {
     const { left, right } = parseRelation(src)
     const f = simp({ t: '-', a: left, b: right })
-    const fy = derive(f, 'y')
+    const fx = simp({ t: '-', a: derive(left, 'x'), b: derive(right, 'x') })
+    const fy = simp({ t: '-', a: derive(left, 'y'), b: derive(right, 'y') })
     if (!hasX(f, 'y') || same(fy, { t: 'n', v: 0 })) {
-      throw new UserError('لم أجد ص في المعادلة أو لا يمكن حل المشتقة بالنسبة إلى ص.')
+      throw new UserError('مش لاقي ص في المعادلة، أو مش قادر أعزل مشتقتها بالنسبة لس.')
     }
-    const result = simp({ t: 'neg', a: { t: '/', a: derive(f, 'x'), b: fy } })
+    const result = simp({ t: 'neg', a: { t: '/', a: fx, b: fy } })
+    const identity = simp({ t: '+', a: fx, b: { t: '*', a: fy, b: result } })
+    if (!same(identity, num(0))) throw new UserError('مش قادر أتحقق من الاشتقاق الضمني بثقة، فراجع المعادلة وجرّب تاني.')
+    const yPrime = '\\frac{\\text{د ص}}{\\text{د س}}'
     return {
-      f, result, rule: 'الاشتقاق الضمني',
+      f, variable: 'x', result, rule: 'الاشتقاق الضمني',
       steps: [
-        { title: 'ترتيب المعادلة', why: 'ننقل الطرفين إلى طرف واحد لتكوين F(س،ص)=0.', tex: `${tex(f)} = 0` },
-        { title: 'الاشتقاق الضمني', why: 'نشتق الطرفين بالنسبة إلى س، ونعامل ص كدالة في س.', tex: `\\frac{d\\text{ص}}{d\\text{س}} = ${tex(result)}` },
-        { title: 'العزل والتبسيط', why: 'نعزل dص/dس من العلاقة الناتجة.', tex: `\\frac{d\\text{ص}}{d\\text{س}} = ${tex(result)}` },
+        { title: 'نرتّب المعادلة', why: 'بننقل الطرفين لطرف واحد عشان تبقى F(س،ص)=0.', tex: `${tex(f)} = 0` },
+        { title: 'نشتق الطرفين', why: 'بنشتق بالنسبة لس، وبنفتكر إن ص دالة في س.', tex: `${tex(derive(left, 'x'))} + ${tex(derive(left, 'y'))}${yPrime} = ${tex(derive(right, 'x'))} + ${tex(derive(right, 'y'))}${yPrime}` },
+        { title: 'نجمع حدود المشتقة', why: 'بنحط كل الحدود التي فيها د ص / د س في طرف واحد.', tex: `${tex(fy)}${yPrime} = -\\left(${tex(fx)}\\right)` },
+        { title: 'نعزل المشتقة', why: 'بنقسم الطرفين على معامل د ص / د س.', tex: `${yPrime} = -\\frac{${tex(fx)}}{${tex(fy)}}` },
+        { title: 'نبسّط الناتج', why: 'نبسّط الكسر ونكتب المشتقة النهائية.', tex: `${yPrime} = ${tex(result)}` },
       ],
-      hints: ['اكتب المعادلة على صورة طرفين.', 'استخدم الاشتقاق الضمني: ص تعتمد على س.', 'اعزل dص/dس بعد الاشتقاق.'],
-      note: 'هذه نتيجة اشتقاق ضمني؛ يلزم تجنب القيم التي تجعل مشتقة F بالنسبة إلى ص تساوي صفرًا.',
+      hints: ['اكتب المعادلة في طرفين.', 'استخدم الاشتقاق الضمني: ص بتعتمد على س.', 'اعزل د ص / د س بعد الاشتقاق.'],
+      note: 'خلي بالك: النتيجة دي مش بتكون معرّفة عند القيم اللي تخلي مشتقة F بالنسبة لص تساوي صفر.',
   }
 }
 
-export function similar(f: N): Solution {
+export function similar(f: N, variable = 'x'): Solution {
   const r = () => Math.floor(Math.random() * 9) + 1
   const mp = (e: N): N => {
     switch (e.t) {
@@ -321,7 +393,7 @@ export function similar(f: N): Solution {
   for (let k = 0; k < 40; k++) {
     const g = mp(f)
     if (tex(g) === tex(f)) continue
-    try { return solve(g) } catch { /* جرّب توليدًا آخر */ }
+    try { return solve(g, variable) } catch { /* جرّب توليدًا آخر */ }
   }
-  throw new UserError('تعذّر توليد مسألة مشابهة لهذه الدالة.')
+  throw new UserError('مش قادر أطلع سؤال شبه الدالة دي. جرّب مسألة أبسط.')
 }
