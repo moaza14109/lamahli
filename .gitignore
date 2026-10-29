@@ -1,0 +1,46 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+
+# Testing and coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+
+# Build and packaging artifacts
+/node_modules/
+/build/
+/dist/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# Logs and local data
+*.log
+*.sqlite3
+*.db
+
+# Environment and tool files
+.python-version
+
+# Generated documentation
+docs/_build/
+
+# OS files
+.DS_Store
+Thumbs.db

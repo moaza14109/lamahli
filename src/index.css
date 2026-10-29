@@ -1,0 +1,12 @@
+@import "tailwindcss";
+@theme { --font-sans: "IBM Plex Sans Arabic", "Noto Sans Arabic", "Cairo", system-ui, sans-serif; --color-brand: #5b4cf0; --color-ink: #1b1d2a; }
+* { box-sizing: border-box; }
+body { background: #f7f8fc; color: var(--color-ink); font-family: var(--font-sans); }
+button, input { font: inherit; }
+.katex .text, .katex .mord.text { font-family: "IBM Plex Sans Arabic", "Noto Sans Arabic", "Cairo", sans-serif; font-style: normal; }
+.math-output { direction: ltr; unicode-bidi: isolate; text-align: center; }
+.math-output .katex { direction: ltr; unicode-bidi: isolate; }
+.math-editor { direction: ltr; unicode-bidi: isolate; }
+.reveal { animation: reveal .25s ease-out; }
+@keyframes reveal { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .reveal { animation: none; } }
